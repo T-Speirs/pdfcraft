@@ -6862,13 +6862,20 @@ fn hebrew_lines_read_in_typing_order() {
 #[test]
 fn hebrew_edits_are_drawn_right_to_left_and_keep_their_right_edge() {
     let mut doc = hebrew_page("BT /F1 12 Tf 300 700 Td (EDCBA) Tj ET");
-    let before = text::text_lines(&doc, 0).unwrap()[0].rect;
+    let original = text::text_lines(&doc, 0).unwrap()[0].rect;
     // One line: the bytes are the visual order of the typed text.
     assert_eq!(text::replace_line(&mut doc, 0, 0, "שלום בדיוק").unwrap().substituted, None);
     let content = String::from_utf8_lossy(&page_content_bytes(&doc, 0)).into_owned();
     assert!(content.contains("(EDCBA HDGF)"), "{content}");
     assert_eq!(text::text_lines(&reopen(&doc), 0).unwrap()[0].text, "שלום בדיוק");
 
+    // The public single-line replacement path keeps the visible right edge when shortened.
+    let mut doc = hebrew_page("BT /F1 12 Tf 300 700 Td (EDCBA) Tj ET");
+    let before = original;
+    text::replace_line(&mut doc, 0, 0, "דוב").unwrap();
+    let line = text::text_lines(&reopen(&doc), 0).unwrap().swap_remove(0);
+    assert_eq!(line.text, "דוב");
+    assert!((line.rect[2] - before[2]).abs() < 0.5, "right edge {} → {}", before[2], line.rect[2]);
     // A paragraph: shorter text stays right-aligned at the old right edge.
     let mut doc = hebrew_page("BT /F1 12 Tf 300 700 Td (EDCBA) Tj ET");
     assert_eq!(text::replace_block(&mut doc, 0, 0, "דוב").unwrap().substituted, None);

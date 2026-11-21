@@ -172,6 +172,27 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
             }
         }
     }
+    // For an ordinary horizontal RTL line in its own font, keep the old advance endpoint fixed.
+    // The paragraph writer handles this separately; replace_line writes the existing text matrix
+    // in place, so a shorter replacement otherwise moves that endpoint left.
+    let rtl_anchor = reused
+        .filter(|_| {
+            crate::bidi::rtl_base(&target.text)
+                && target.rotation().abs() < 1e-3
+                && (target.origin.state.scale - 1.0).abs() < 1e-6
+                && ops.get(first).is_some_and(|op| op.is("Tj") || op.is("TJ"))
+        })
+        .map(|metrics| {
+            let size = target.origin.state.font.as_ref().map_or(target.size, |(_, size)| *size);
+            let space = source_space(doc, &fonts_res, metrics);
+            let old = source_width(metrics, &target.text, size, space, target.origin.state.char_spacing, target.origin.state.word_spacing);
+            let new = source_width(metrics, &shown, size, space, target.origin.state.char_spacing, target.origin.state.word_spacing);
+            old - new
+        })
+        .filter(|dx| dx.abs() > 1e-6);
+    if let Some(dx) = rtl_anchor {
+        replacement.insert(0, Op::new("Td", vec![pdfcraft_content::num(dx), pdfcraft_content::num(0.0)]));
+    }
     // A line an earlier replacement wrote in two fonts is in a `/PCEdLine` sequence of its own,
     // with its fonts and the moves standing in for spaces the source font lacks: those go
     // with the line, or each edit would nest one more (review on #2955). The line then starts in
